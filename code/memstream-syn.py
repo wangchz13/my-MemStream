@@ -22,8 +22,8 @@ args = parser.parse_args()
 nfile = None
 lfile = None
 if args.dataset == 'SYN':
-    nfile = '../data/syn.txt'
-    lfile = '../data/synlabel.txt'
+    nfile = 'data/syn.txt'
+    lfile = 'data/synlabel.txt'
 
 device = torch.device(args.dev)
 
@@ -110,3 +110,26 @@ for data in data_loader:
 scores = np.array([i.cpu() for i in err])
 auc = metrics.roc_auc_score(labels, scores)
 print("ROC-AUC", auc)
+
+# 绘制ROC曲线
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+# 计算 ROC 曲线
+fpr, tpr, thresholds = roc_curve(labels, scores)
+
+# 计算 AUC 分数
+roc_auc = auc(fpr, tpr)
+
+# 打印 ROC-AUC 分数
+print("ROC-AUC Score:", roc_auc)
+
+# 可视化 ROC 曲线
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc="lower right")
+plt.show()

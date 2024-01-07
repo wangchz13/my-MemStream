@@ -10,6 +10,7 @@ import scipy.spatial as sp
 from torch.autograd import Variable
 import argparse
 import scipy.io
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='NSL')
@@ -25,19 +26,19 @@ torch.manual_seed(args.seed)
 nfile = None
 lfile = None
 if args.dataset == 'NSL':
-    nfile = '../data/nsl.txt'
-    lfile = '../data/nsllabel.txt'
+    nfile = 'data/nsl.txt'
+    lfile = 'data/nsllabel.txt'
 elif args.dataset == 'KDD':
-    nfile = '../data/kdd.txt'
-    lfile = '../data/kddlabel.txt'
+    nfile = 'data/kdd.txt'
+    lfile = 'data/kddlabel.txt'
 elif args.dataset == 'UNSW':
-    nfile = '../data/unsw.txt'
-    lfile = '../data/unswlabel.txt'
+    nfile = 'data/unsw.txt'
+    lfile = 'data/unswlabel.txt'
 elif args.dataset == 'DOS':
-    nfile = '../data/dos.txt'
-    lfile = '../data/doslabel.txt'
+    nfile = 'data/dos.txt'
+    lfile = 'data/doslabel.txt'
 else:
-    df = scipy.io.loadmat('../data/'+args.dataset+".mat")
+    df = scipy.io.loadmat('data/'+args.dataset+".mat")
     numeric = torch.FloatTensor(df['X'])
     labels = (df['y']).astype(float).reshape(-1)
 
@@ -60,6 +61,7 @@ class MemStream(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(self.in_dim, self.out_dim),
             nn.Tanh(),
+            # nn.GELU()
         ).to(device)
         self.decoder = nn.Sequential(
             nn.Linear(self.out_dim, self.in_dim)
@@ -76,8 +78,8 @@ class MemStream(nn.Module):
         new = (data - self.mean) / self.std
         new[:, self.std == 0] = 0
         new = Variable(new)
-        for epoch in range(epochs):
-            self.optimizer.zero_grad()
+        for epoch in range(epochs): # 这一步是为了编解码器适应内存中的数据
+            self.optimizer.zero_grad() 
             output = self.decoder(self.encoder(new + 0.001*torch.randn_like(new).to(device)))
             loss = self.loss_fn(output, new)
             loss.backward()
@@ -134,9 +136,33 @@ model.train_autoencoder(Variable(init_data).to(device), epochs=args.epochs)
 torch.set_grad_enabled(False)
 model.initialize_memory(Variable(init_data[:N]))
 err = []
-for data in data_loader:
+for data in tqdm(data_loader, desc="Processing items", unit="batch"):
     output = model(data.to(device))
     err.append(output)
 scores = np.array([i.cpu() for i in err])
 auc = metrics.roc_auc_score(labels, scores)
 print("ROC-AUC", auc)
+
+
+# 绘制ROC曲线
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+# 计算 ROC 曲线
+fpr, tpr, thresholds = roc_curve(labels, scores)
+
+# 计算 AUC 分数
+roc_auc = auc(fpr, tpr)
+
+# 打印 ROC-AUC 分数
+print("ROC-AUC Score:", roc_auc)
+
+# 可视化 ROC 曲线
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc="lower right")
+plt.show()
